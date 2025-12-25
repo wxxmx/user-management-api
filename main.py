@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+# In-memory storage (temporary, until we add a database)
 users = []
 user_id_counter = 1
 
@@ -9,6 +10,7 @@ user_id_counter = 1
 def home():
     return {"message": "User Management API is running"}
 
+# CREATE a user
 @app.route("/users", methods=["POST"])
 def create_user():
     global user_id_counter
@@ -28,6 +30,11 @@ def create_user():
     user_id_counter += 1
 
     return jsonify(user), 201
+
+# GET all users
+@app.route("/users", methods=["GET"])
+def get_users():
+    return jsonify(users), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
