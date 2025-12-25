@@ -1,7 +1,14 @@
 from flask import Flask, request, jsonify
+from flask_jwt_extended import (
+    JWTManager, create_access_token, jwt_required
+)
+from werkzeug.security import generate_password_hash, check_password_hash
 from database import init_db, get_connection
 
 app = Flask(__name__)
+
+app.config["JWT_SECRET_KEY"] = "super-secret-key-change-this"
+jwt = JWTManager(app)
 
 init_db()
 
@@ -9,21 +16,23 @@ init_db()
 def home():
     return {"message": "User Management API is running"}
 
-# CREATE user (POST /users)
+# REGISTER USER
 @app.route("/users", methods=["POST"])
-def create_user():
+def register_user():
     data = request.get_json()
 
-    if not data or "name" not in data or "email" not in data:
-        return jsonify({"error": "Name and email are required"}), 400
+    if not data or "name" not in data or "email" not in data or "password" not in data:
+        return jsonify({"error": "Name, email, and password are required"}), 400
+
+    hashed_password = generate_password_hash(data["password"])
 
     try:
         conn = get_connection()
         cursor = conn.cursor()
 
         cursor.execute(
-            "INSERT INTO users (name, email) VALUES (?, ?)",
-            (data["name"], data["email"])
+            "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+            (data["name"], data["email"], hashed_password)
         )
 
         conn.commit()
@@ -39,8 +48,33 @@ def create_user():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# GET all users (GET /users)
+# LOGIN USER
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+
+    if not data or "email" not in data or "password" not in data:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, password FROM users WHERE email = ?",
+        (data["email"],)
+    )
+    user = cursor.fetchone()
+    conn.close()
+
+    if not user or not check_password_hash(user[1], data["password"]):
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    access_token = create_access_token(identity=str(user[0]))
+    return jsonify({"access_token": access_token}), 200
+
+# PROTECTED ROUTE
 @app.route("/users", methods=["GET"])
+@jwt_required()
 def get_users():
     conn = get_connection()
     cursor = conn.cursor()
